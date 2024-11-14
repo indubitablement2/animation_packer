@@ -1,54 +1,60 @@
 import { MaxRectsPacker } from 'maxrects-packer'
 import JSZip from 'jszip'
 
-document.getElementById("animation_count").addEventListener("input", _onInputAnimationCount);
-document.getElementById("generate").addEventListener("click", _onGenerate);
-document.getElementById("animation_page").addEventListener("change", _onAnimationPage);
-document.getElementById("download").addEventListener("click", _onDownload);
-
-let count = 0;
+const ANIMATION_ID = {
+  IDLE: 0,
+  MOVE: 1,
+  ATTACK: 2,
+};
 
 // image_size, page_idx, page_offset, draw_offset
 let output_json = [];
 let output_pages = [];
 
-document.getElementById("animation_count").value = 1;
-_onInputAnimationCount();
+for (const animation_id in ANIMATION_ID) {
+  let animation = document.createElement('div');
+  animation.innerHTML = `
+    <label for="${animation_id}">${animation_id}:</label>
+    <input type="file" id="${animation_id}" accept="image" multiple />
+  `;
+  document.getElementById('animations').appendChild(animation);
+}
 
-function _onInputAnimationCount() {
-  document.getElementById('animations').innerHTML = '';
+document.getElementById("clear").addEventListener("click", _onClear);
+document.getElementById("generate").addEventListener("click", _onGenerate);
+document.getElementById("animation_page").addEventListener("change", _onAnimationPage);
+document.getElementById("download").addEventListener("click", _onDownload);
 
-  count = parseInt(document.getElementById("animation_count").value);
-
-  for (let i = 0; i < count; i++) {
-    let animation = document.createElement('div');
-    animation.innerHTML = `
-      <label for="animation_${i}">${i}:</label>
-      <input type="file" id="animation_${i}" accept="image" multiple />
-    `;
-    document.getElementById('animations').appendChild(animation);
+function _onClear() {
+  for (const animation_id in ANIMATION_ID) {
+    document.getElementById(`${animation_id}`).value = "";
   }
 }
 
 async function _onGenerate() {
+  let total_files = 0;
+  for (const animation_id in ANIMATION_ID) {
+    total_files += document.getElementById(`${animation_id}`).files.length;
+  }
+  if (total_files === 0) {
+    return;
+  }
+
   document.getElementById('output').hidden = true;
   document.getElementById("generate").hidden = true;
   document.getElementById("progress").hidden = false;
   document.getElementById("progress").textContent = "0%";
 
-  let total_files = 0;
-  for (let i = 0; i < count; i++) {
-    total_files += document.getElementById(`animation_${i}`).files.length;
-  }
+
   let progress = 0;
 
   const animations = [];
   const imgs = [];
 
-  for (let animation_idx = 0; animation_idx < count; animation_idx++) {
+  for (const animation_id in ANIMATION_ID) {
     const animation = [];
 
-    const files = document.getElementById(`animation_${animation_idx}`).files;
+    const files = document.getElementById(`${animation_id}`).files;
     for (let animation_frame = 0; animation_frame < files.length; animation_frame++) {
       const file = files[animation_frame];
       console.log(file);
@@ -118,7 +124,7 @@ async function _onGenerate() {
       }
       animation.push(img_idx);
 
-      progress += 1 / total_files * 80;
+      progress += 1 / total_files * 90;
       document.getElementById("progress").textContent = progress.toFixed(2) + "%";
     }
 
@@ -168,7 +174,12 @@ async function _onGenerate() {
 
   // Generate output json.
   output_json = [];
-  for (const animation of animations) {
+  let last_useful_animation = 0;
+  for (let animation_idx = 0; animation_idx < animations.length; animation_idx++) {
+    const animation = animations[animation_idx];
+    if (animation.length != 0) {
+      last_useful_animation = animation_idx;
+    }
     const frames = [];
     for (const img_idx of animation) {
       const img = imgs[img_idx];
@@ -184,6 +195,7 @@ async function _onGenerate() {
     }
     output_json.push(frames);
   }
+  output_json = output_json.slice(0, last_useful_animation + 1);
   console.log(output_json);
 
   document.getElementById("animation_page").max = output_pages.length - 1;
