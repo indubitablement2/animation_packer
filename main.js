@@ -1,17 +1,17 @@
 import { MaxRectsPacker } from 'maxrects-packer'
 import JSZip from 'jszip'
 
-const ANIMATION_ID = {
-  IDLE: 0,
-  MOVE: 1,
-  ATTACK: 2,
-};
+const ANIMATION_ID = [
+  "IDLE",
+  "MOVE",
+  "ATTACK",
+];
 
 // image_size, page_idx, page_offset, draw_offset
-let output_json = [];
+let output_json = {};
 let output_pages = [];
 
-for (const animation_id in ANIMATION_ID) {
+for (const animation_id of ANIMATION_ID) {
   let animation = document.createElement('div');
   animation.innerHTML = `
     <label for="${animation_id}">${animation_id}:</label>
@@ -26,14 +26,14 @@ document.getElementById("animation_page").addEventListener("change", _onAnimatio
 document.getElementById("download").addEventListener("click", _onDownload);
 
 function _onClear() {
-  for (const animation_id in ANIMATION_ID) {
+  for (const animation_id of ANIMATION_ID) {
     document.getElementById(`${animation_id}`).value = "";
   }
 }
 
 async function _onGenerate() {
   let total_files = 0;
-  for (const animation_id in ANIMATION_ID) {
+  for (const animation_id of ANIMATION_ID) {
     total_files += document.getElementById(`${animation_id}`).files.length;
   }
   if (total_files === 0) {
@@ -51,7 +51,7 @@ async function _onGenerate() {
   const animations = [];
   const imgs = [];
 
-  for (const animation_id in ANIMATION_ID) {
+  for (const animation_id of ANIMATION_ID) {
     const animation = [];
 
     const files = document.getElementById(`${animation_id}`).files;
@@ -173,29 +173,28 @@ async function _onGenerate() {
   }
 
   // Generate output json.
-  output_json = [];
-  let last_useful_animation = 0;
+  output_json = {};
   for (let animation_idx = 0; animation_idx < animations.length; animation_idx++) {
+    const animation_id = ANIMATION_ID[animation_idx];
     const animation = animations[animation_idx];
-    if (animation.length != 0) {
-      last_useful_animation = animation_idx;
-    }
     const frames = [];
     for (const img_idx of animation) {
       const img = imgs[img_idx];
-      frames.push([
-        img.width,
-        img.height,
-        img["page_idx"],
-        img["page_offset_x"],
-        img["page_offset_y"],
-        img["draw_offset_x"],
-        img["draw_offset_y"],
-      ]);
+      frames.push({
+        "width": img.width,
+        "height": img.height,
+        "page_idx": img["page_idx"],
+        "page_offset_x": img["page_offset_x"],
+        "page_offset_y": img["page_offset_y"],
+        "draw_offset_x": img["draw_offset_x"],
+        "draw_offset_y": img["draw_offset_y"],
+      });
     }
-    output_json.push(frames);
+
+    if (frames.length > 0) {
+      output_json[animation_id] = frames;
+    }
   }
-  output_json = output_json.slice(0, last_useful_animation + 1);
   console.log(output_json);
 
   document.getElementById("animation_page").max = output_pages.length - 1;
