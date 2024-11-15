@@ -20,10 +20,36 @@ for (const animation_id of ANIMATION_ID) {
   document.getElementById('animations').appendChild(animation);
 }
 
+document.getElementById("auto").addEventListener("change", _onAuto);
 document.getElementById("clear").addEventListener("click", _onClear);
 document.getElementById("generate").addEventListener("click", _onGenerate);
 document.getElementById("animation_page").addEventListener("change", _onAnimationPage);
 document.getElementById("download").addEventListener("click", _onDownload);
+
+function _onAuto() {
+  const files = document.getElementById("auto").files;
+
+  const order = [...ANIMATION_ID];
+  order.sort();
+  order.reverse();
+
+  for (const file of files) {
+    const fileName = file.name.toUpperCase();
+    for (const animation_id of order) {
+      if (fileName.startsWith(animation_id)) {
+        const inputElement = document.getElementById(animation_id);
+        const dataTransfer = new DataTransfer();
+        for (const existingFile of inputElement.files) {
+          dataTransfer.items.add(existingFile);
+        }
+        dataTransfer.items.add(file);
+        inputElement.files = dataTransfer.files;
+        break;
+      }
+    }
+  }
+  document.getElementById("auto").value = "";
+}
 
 function _onClear() {
   for (const animation_id of ANIMATION_ID) {
@@ -89,9 +115,11 @@ async function _onGenerate() {
       // Crop image
       canvas.width = right - left + 1;
       canvas.height = bottom - top + 1;
-      canvas["draw_offset_x"] = left;
-      canvas["draw_offset_y"] = top;
       ctx.drawImage(img, left, top, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+
+      // Calculate draw offset
+      canvas["draw_offset_x"] = left - img.width * parseFloat(document.getElementById("offset_x").value);
+      canvas["draw_offset_y"] = top - img.height * parseFloat(document.getElementById("offset_y").value);
 
       // Check for duplicate images
       var img_idx = -1;
