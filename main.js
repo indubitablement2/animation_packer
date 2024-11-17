@@ -7,6 +7,9 @@ const ANIMATION_ID = [
   "ATTACK",
 ];
 
+const MAX_MERGE_WASTE = 16000;
+const MAX_RECT_SIZE = 512;
+
 // image_size, page_idx, page_offset, draw_offset
 let output_json = {};
 let output_pages = [];
@@ -74,8 +77,14 @@ async function _onGenerate() {
 
   let progress = 0;
 
+  /**
+   * @type {HTMLCanvasElement[][]}
+   */
   const animations = [];
-  const imgs = [];
+  /**
+   * @type {HTMLCanvasElement[]}
+   */
+  const canvases = [];
 
   for (const animation_id of ANIMATION_ID) {
     const animation = [];
@@ -85,72 +94,7 @@ async function _onGenerate() {
       const file = files[animation_frame];
       console.log(file);
 
-      const img = new Image();
-      img.src = URL.createObjectURL(file);
-      await img.decode();
-
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0);
-
-      const imageData = ctx.getImageData(0, 0, img.width, img.height);
-      const pixels = imageData.data;
-
-      // Identify non-transparent pixel bounds
-      let top = img.height, left = img.width, bottom = 0, right = 0;
-      for (let y = 0; y < img.height; y++) {
-        for (let x = 0; x < img.width; x++) {
-          const index = (y * img.width + x) * 4 + 3;
-          if (pixels[index] > 0) {
-            top = Math.min(top, y);
-            left = Math.min(left, x);
-            bottom = Math.max(bottom, y);
-            right = Math.max(right, x);
-          }
-        }
-      }
-
-      // Crop image
-      canvas.width = right - left + 1;
-      canvas.height = bottom - top + 1;
-      ctx.drawImage(img, left, top, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
-
-      // Calculate draw offset
-      canvas["draw_offset_x"] = left - img.width * parseFloat(document.getElementById("offset_x").value);
-      canvas["draw_offset_y"] = top - img.height * parseFloat(document.getElementById("offset_y").value);
-
-      // Check for duplicate images
-      var img_idx = -1;
-      for (let i = 0; i < imgs.length; i++) {
-        const img = imgs[i];
-        if (img.width === canvas.width
-          && img.height === canvas.height
-          && img["draw_offset_x"] === canvas["draw_offset_x"]
-          && img["draw_offset_y"] === canvas["draw_offset_y"]) {
-          const img_data = img.getContext("2d").getImageData(0, 0, img.width, img.height).data;
-          const canvas_data = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
-          let equal = true;
-          for (let j = 0; j < img_data.length; j++) {
-            if (img_data[j] !== canvas_data[j]) {
-              equal = false;
-              break;
-            }
-          }
-          if (equal) {
-            console.log('duplicate image');
-            img_idx = i;
-            break;
-          }
-        }
-      }
-
-      if (img_idx === -1) {
-        img_idx = imgs.length;
-        imgs.push(canvas);
-      }
-      animation.push(img_idx);
+      animation.push(await parse_image(file, canvases));
 
       progress += 1 / total_files * 90;
       document.getElementById("progress").textContent = progress.toFixed(2) + "%";
@@ -167,37 +111,45 @@ async function _onGenerate() {
     allowRotation: false,
     tag: false,
     exclusiveTag: false,
-    border: 2
+    border: 0
   };
-  let packer = new MaxRectsPacker(2048, 2048, 2, options);
+  let packer = new MaxRectsPacker(2048, 2048, 1, options);
 
   let input = [];
-  for (let i = 0; i < imgs.length; i++) {
-    const img = imgs[i];
-    input.push({ width: img.width, height: img.height, data: i });
+  for (const canvas of canvases) {
+    for (const rect of canvas["rects"]) {
+      rect["canvas"] = canvas;
+      input.push({ width: rect.width, height: rect.height, data: rect });
+    }
   }
   packer.addArray(input);
 
-  document.getElementById("progress").textContent = "80%";
+  document.getElementById("progress").textContent = "95%";
 
   // Create output pages.
   const pages = packer.bins;
   output_pages = [];
-  for (let i = 0; i < pages.length; i++) {
-    const page = pages[i];
-    const canvas = document.createElement("canvas");
-    canvas.width = page.width;
-    canvas.height = page.height;
-    const ctx = canvas.getContext("2d");
-    for (let j = 0; j < page.rects.length; j++) {
-      const rect = page.rects[j];
-      const img = imgs[rect.data];
-      img["page_idx"] = i;
-      img["page_offset_x"] = rect.x;
-      img["page_offset_y"] = rect.y;
-      ctx.drawImage(img, rect.x, rect.y);
+  for (let page_idx = 0; page_idx < pages.length; page_idx++) {
+    const page = pages[page_idx];
+    const out_canvas = document.createElement("canvas");
+    out_canvas.width = page.width;
+    out_canvas.height = page.height;
+    const ctx = out_canvas.getContext("2d");
+    for (const _rect of page.rects) {
+      const rect = _rect.data;
+      const in_canvas = rect.canvas;
+      rect["page_idx"] = page_idx;
+      rect["page_offset_x"] = _rect.x;
+      rect["page_offset_y"] = _rect.y;
+      const sx = rect.x;
+      const sy = rect.y;
+      const w = _rect.width;
+      const h = _rect.height;
+      const dx = _rect.x;
+      const dy = _rect.y;
+      ctx.drawImage(in_canvas, sx, sy, w, h, dx, dy, w, h);
     }
-    output_pages.push(canvas);
+    output_pages.push(out_canvas);
   }
 
   // Generate output json.
@@ -206,17 +158,21 @@ async function _onGenerate() {
     const animation_id = ANIMATION_ID[animation_idx];
     const animation = animations[animation_idx];
     const frames = [];
-    for (const img_idx of animation) {
-      const img = imgs[img_idx];
-      frames.push({
-        "width": img.width,
-        "height": img.height,
-        "page_idx": img["page_idx"],
-        "page_offset_x": img["page_offset_x"],
-        "page_offset_y": img["page_offset_y"],
-        "draw_offset_x": img["draw_offset_x"],
-        "draw_offset_y": img["draw_offset_y"],
-      });
+    for (const canvas of animation) {
+      const rects = [];
+      for (const rect of canvas.rects) {
+        rects.push(rect.data);
+      }
+      frames.push(rects);
+      // frames.push({
+      //   "width": img.width,
+      //   "height": img.height,
+      //   "page_idx": img["page_idx"],
+      //   "page_offset_x": img["page_offset_x"],
+      //   "page_offset_y": img["page_offset_y"],
+      //   "draw_offset_x": img["draw_offset_x"],
+      //   "draw_offset_y": img["draw_offset_y"],
+      // });
     }
 
     if (frames.length > 0) {
@@ -237,10 +193,10 @@ async function _onGenerate() {
 function _onAnimationPage() {
   const page = parseInt(document.getElementById("animation_page").value);
   const canvas = output_pages[page];
-  document.getElementById('output_canvas').width = canvas.width / 4;
-  document.getElementById('output_canvas').height = canvas.height / 4;
+  document.getElementById('output_canvas').width = canvas.width / 2;
+  document.getElementById('output_canvas').height = canvas.height / 2;
   const ctx = document.getElementById('output_canvas').getContext("2d");
-  ctx.drawImage(canvas, 0, 0, canvas.width / 4, canvas.height / 4);
+  ctx.drawImage(canvas, 0, 0, canvas.width / 2, canvas.height / 2);
 }
 
 function _onDownload() {
@@ -257,4 +213,194 @@ function _onDownload() {
     link.click();  // Trigger the download
     URL.revokeObjectURL(link.href);
   });
+}
+/**
+ * 
+ * @param {*} file 
+ * @param {HTMLCanvasElement[]} canvases 
+ * @returns {Promise<HTMLCanvasElement>}
+ */
+async function parse_image(file, canvases) {
+  const img = new Image();
+  img.src = URL.createObjectURL(file);
+  await img.decode();
+
+  const canvas = document.createElement("canvas");
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0);
+
+  const pixels = ctx.getImageData(0, 0, img.width, img.height).data;
+  canvas["pixels"] = pixels;
+
+  // Check for duplicate images
+  for (const other of canvases) {
+    const other_pixels = other["pixels"];
+    if (pixels.length !== other_pixels.length) {
+      continue;
+    }
+
+    let duplicate = true;
+    for (let i = 0; i < pixels.length; i++) {
+      if (pixels[i] !== other_pixels[i]) {
+        duplicate = false;
+        break;
+      }
+    }
+    if (duplicate) {
+      console.log('duplicate image');
+      return other;
+    }
+  }
+
+  const rects = [];
+
+  // Identify stating rects
+  for (let y = 0; y < img.height; y++) {
+    let x_start = 0;
+    let was_visible = pixels[y * img.width * 4 + 3] > 0;
+    for (let x = 0; x < img.width; x++) {
+      const is_visible = pixels[(y * img.width + x) * 4 + 3] > 0;
+      if (is_visible !== was_visible) {
+        if (was_visible) {
+          rects.push({ x: x_start, y: y, width: x - x_start, height: 1, used_pixels: x - x_start });
+        }
+        x_start = x;
+        was_visible = is_visible;
+      }
+    }
+    if (was_visible) {
+      rects.push({ x: x_start, y: y, width: x - x_start, height: 1, used_pixels: x - x_start });
+    }
+  }
+
+  // Merge rects
+  while (rects.length > 1) {
+    let smallest_waste = Number.MAX_VALUE;
+    let smallest_rect_a;
+    let smallest_rect_b;
+
+    // Find the next best pair to merge
+    for (let i = 0; i < rects.length - 1; i++) {
+      const rect_a = rects[i];
+      for (let j = i + 1; j < rects.length; j++) {
+        const rect_b = rects[j];
+
+        let new_rect = rect_merge(rect_a, rect_b);
+        if (rect_wasted_pixels(new_rect) < smallest_waste
+          && new_rect.width <= MAX_RECT_SIZE
+          && new_rect.height <= MAX_RECT_SIZE) {
+          smallest_waste = rect_wasted_pixels(new_rect);
+          smallest_rect_a = rect_a;
+          smallest_rect_b = rect_b;
+        }
+      }
+    }
+
+    if (smallest_waste > MAX_MERGE_WASTE) {
+      break;
+    }
+
+    // Merge the best pair
+    let merged_rects = new Set();
+    merged_rects.add(smallest_rect_a);
+    merged_rects.add(smallest_rect_b);
+    let new_rect = rect_merge(smallest_rect_a, smallest_rect_b);
+    let i = 0;
+    while (i < rects.length) {
+      const other_rect = rects[i];
+      if (rect_intersect(new_rect, other_rect) && !merged_rects.has(other_rect)) {
+        new_rect = rect_merge(new_rect, other_rect);
+        merged_rects.add(other_rect);
+        i = 0;
+      } else {
+        i += 1;
+      }
+    }
+
+    // Remove merged rects
+    for (const rect of merged_rects) {
+      rects.splice(rects.indexOf(rect), 1);
+    }
+    rects.push(new_rect);
+  }
+
+  // Split any rect above 512
+  let i = 0;
+  while (i < rects.length) {
+    const rect = rects[i];
+    if (rect.width > MAX_RECT_SIZE) {
+      rects.push({ x: rect.x + MAX_RECT_SIZE, y: rect.y, width: rect.width - MAX_RECT_SIZE, height: rect.height });
+      rect.width = MAX_RECT_SIZE;
+    } else if (rect.height > MAX_RECT_SIZE) {
+      rects.push({ x: rect.x, y: rect.y + MAX_RECT_SIZE, width: rect.width, height: rect.height - MAX_RECT_SIZE });
+      rect.height = MAX_RECT_SIZE;
+    } else {
+      i += 1;
+    }
+  }
+
+  // Remove empty space from rects
+  for (const rect of rects) {
+    let x_start = rect.x;
+    let x_end = rect.x + rect.width;
+    let y_start = rect.y;
+    let y_end = rect.y + rect.height;
+    for (let y = rect.y; y < y_end; y++) {
+      for (let x = rect.x; x < x_end; x++) {
+        if (pixels[(y * img.width + x) * 4 + 3] > 0) {
+          x_start = Math.min(x_start, x);
+          x_end = Math.max(x_end, x + 1);
+          y_start = Math.min(y_start, y);
+          y_end = Math.max(y_end, y + 1);
+        }
+      }
+    }
+    rect.x = x_start;
+    rect.y = y_start;
+    rect.width = x_end - x_start;
+    rect.height = y_end - y_start;
+  }
+
+  // Calculate draw offset for each rects
+  const offset_x = parseFloat(document.getElementById("offset_x").value);
+  const offset_y = parseFloat(document.getElementById("offset_y").value);
+  for (const rect of rects) {
+    rect["draw_offset_x"] = rect.x - img.width * offset_x;
+    rect["draw_offset_y"] = rect.y - img.height * offset_y;
+  }
+
+  canvas["rects"] = rects;
+  canvases.push(canvas);
+  return canvas;
+}
+
+function rect_merge(a, b) {
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  const x_end = Math.max(a.x + a.width, b.x + b.width);
+  const y_end = Math.max(a.y + a.height, b.y + b.height);
+  return {
+    x: x,
+    y: y,
+    width: x_end - x,
+    height: y_end - y,
+    used_pixels: a.used_pixels + b.used_pixels,
+  };
+}
+
+function rect_area(rect) {
+  return rect.width * rect.height;
+}
+
+function rect_wasted_pixels(rect) {
+  return rect_area(rect) - rect.used_pixels;
+}
+
+function rect_intersect(a, b) {
+  return a.x < b.x + b.width
+    && a.x + a.width > b.x
+    && a.y < b.y + b.height
+    && a.y + a.height > b.y;
 }
