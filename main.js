@@ -7,7 +7,7 @@ const ANIMATION_ID = [
   "ATTACK",
 ];
 
-const MAX_MERGE_WASTE = 16000;
+const MAX_MERGE_WASTE = 12000;
 const MAX_RECT_SIZE = 512;
 
 // image_size, page_idx, page_offset, draw_offset
