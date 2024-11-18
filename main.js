@@ -161,18 +161,17 @@ async function _onGenerate() {
     for (const canvas of animation) {
       const rects = [];
       for (const rect of canvas.rects) {
-        rects.push(rect.data);
+        rects.push([
+          rect.width,
+          rect.height,
+          rect["page_idx"],
+          rect["page_offset_x"],
+          rect["page_offset_y"],
+          rect["draw_offset_x"],
+          rect["draw_offset_y"],
+        ])
       }
       frames.push(rects);
-      // frames.push({
-      //   "width": img.width,
-      //   "height": img.height,
-      //   "page_idx": img["page_idx"],
-      //   "page_offset_x": img["page_offset_x"],
-      //   "page_offset_y": img["page_offset_y"],
-      //   "draw_offset_x": img["draw_offset_x"],
-      //   "draw_offset_y": img["draw_offset_y"],
-      // });
     }
 
     if (frames.length > 0) {
