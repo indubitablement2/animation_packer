@@ -153,6 +153,7 @@ async function _onGenerate() {
   }
 
   // Generate output json.
+  const num_duplicates = 30 / parseInt(document.getElementById("infps").value);
   output_json = {};
   for (let animation_idx = 0; animation_idx < animations.length; animation_idx++) {
     const animation_id = ANIMATION_ID[animation_idx];
@@ -171,7 +172,9 @@ async function _onGenerate() {
           rect["draw_offset_y"],
         ])
       }
-      frames.push(rects);
+      for (let i = 0; i < num_duplicates; i++) {
+        frames.push(rects);
+      }
     }
 
     if (frames.length > 0) {
