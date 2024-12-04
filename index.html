@@ -12,30 +12,22 @@
   <div id="root">
     <h1>Animation Processor</h1>
 
-    <input type="button" id="clear" value="Clear" />
-    <br />
-    <label for="auto">auto sort:</label>
-    <input type="file" id="auto" accept="image" multiple />
-    <br />
-    <label for="offset_x">x origin:</label>
-    <input type="text" id="offset_x" value="0.5" />
-    <label for="offset_y">y origin:</label>
-    <input type="text" id="offset_y" value="0.5" />
-    <br />
-    <label for="infps">Input fps:</label>
-    <select id="infps">
-      <option value="30">30</option>
-      <option value="15">15</option>
-      <option value="10">10</option>
-    </select>
+    <div>Animations:
+      "idle",
+      "move",
+      "attack",
+      "knockback",
+      "death",
+      "portait" (taken as is)
+    </div>
     <br />
     <br />
 
-    <div id="animations"></div>
+    <label for="images">Images:</label>
+    <input type="file" id="images" accept="image" multiple />
+    <br />
+    <br />
 
-    <br />
-    <br />
-    <button id="generate">Generate</button>
     <h2 id="progress" hidden>0%</h2>
     <br />
 
