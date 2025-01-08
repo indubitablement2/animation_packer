@@ -12,23 +12,20 @@
   <div id="root">
     <h1>Animation Processor</h1>
 
-    <div>Animations:
-      "idle",
-      "move",
-      "attack",
-      "knockback",
-      "death",
-      "portait" (taken as is)
-    </div>
+    <div id="animation_names"></div>
     <br />
+
+    <label for="base_frame_rate">Base frame rate:</label>
+    <select id="base_frame_rate">
+      <option value="1">30</option>
+      <option value="2">15</option>
+      <option value="3">10</option>
+    </select>
     <br />
 
     <label for="images">Images:</label>
     <input type="file" id="images" accept="image" multiple />
-    <br />
-    <br />
-
-    <h2 id="progress" hidden>0%</h2>
+    <progress id="progress" value="0"></progress>
     <br />
 
     <div id="output" hidden>
