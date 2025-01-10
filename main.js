@@ -169,6 +169,7 @@ async function _onImages() {
     const ctx = out_canvas.getContext("2d");
     for (const page_rect of page.rects) {
       const rect = page_rect.data;
+      rect["page_rect"] = page_rect;
 
       rect.page_idx = page_idx;
       const sx = rect.x;
@@ -211,8 +212,8 @@ async function _onImages() {
           rect.width,
           rect.height,
           rect.page_idx,
-          rect.x,
-          rect.y,
+          rect.page_rect.x,
+          rect.page_rect.y,
           rect.x - rect.image.width / 2,
           rect.y - rect.image.height / 2,
         ])
@@ -243,29 +244,63 @@ function _onAnimationPage() {
 
 async function _onDownload() {
   const zip = new JSZip();
+
+  const toBlobAsync = (canvas, type, quality) =>
+    new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+
+  // Pages
   for (let i = 0; i < output_pages.length; i++) {
-    // save as webp
-    zip.file(`page${i}.webp`, output_pages[i].toDataURL("image/webp", 1).split("base64,")[1], { base64: true });
+    const blob = await toBlobAsync(output_pages[i], "image/webp", 1);
+    zip.file(`page${i}.webp`, blob);
   }
-  if (output_portrait) {
-    const img = new Image();
-    img.src = URL.createObjectURL(output_portrait);
-    await img.decode();
-    const canvas = document.createElement("canvas");
-    canvas.width = img.width;
-    canvas.height = img.height;
-    canvas.getContext("2d").drawImage(img, 0, 0);
-    // save as webp
-    zip.file(`portrait.webp`, canvas.toDataURL("image/webp", 1).split("base64,")[1], { base64: true });
-  }
+
+  // Portrait
+  const img = new Image();
+  img.src = URL.createObjectURL(output_portrait);
+  await img.decode();
+
+  const canvas = document.createElement("canvas");
+  canvas.width = img.width;
+  canvas.height = img.height;
+  canvas.getContext("2d").drawImage(img, 0, 0);
+
+  const portraitBlob = await toBlobAsync(canvas, "image/webp", 1);
+  zip.file(`portrait.webp`, portraitBlob);
+
+
+  // JSON
   zip.file('animations.json', JSON.stringify(output_json));
-  zip.generateAsync({ type: "blob" }).then(function (content) {
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(content);
-    link.download = "animation.zip";  // Set the name of the download file
-    link.click();  // Trigger the download
-    URL.revokeObjectURL(link.href);
-  });
+
+  const zipBlob = await zip.generateAsync({ type: "blob" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(zipBlob);
+  link.download = "animation.zip";
+  link.click();
+  URL.revokeObjectURL(link.href);
+
+  // for (let i = 0; i < output_pages.length; i++) {
+  //   // save as webp
+  //   zip.file(`page${i}.webp`, output_pages[i].toDataURL("image/webp", 1).split("base64,")[1], { base64: true });
+  // }
+  // if (output_portrait) {
+  //   const img = new Image();
+  //   img.src = URL.createObjectURL(output_portrait);
+  //   await img.decode();
+  //   const canvas = document.createElement("canvas");
+  //   canvas.width = img.width;
+  //   canvas.height = img.height;
+  //   canvas.getContext("2d").drawImage(img, 0, 0);
+  //   // save as webp
+  //   zip.file(`portrait.webp`, canvas.toDataURL("image/webp", 1).split("base64,")[1], { base64: true });
+  // }
+  // zip.file('animations.json', JSON.stringify(output_json));
+  // zip.generateAsync({ type: "blob" }).then(function (content) {
+  //   const link = document.createElement("a");
+  //   link.href = URL.createObjectURL(content);
+  //   link.download = "animation.zip";  // Set the name of the download file
+  //   link.click();  // Trigger the download
+  //   URL.revokeObjectURL(link.href);
+  // });
 }
 
 /**
