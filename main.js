@@ -10,7 +10,8 @@ const ANIMATION_ID = [
   "death",
 ];
 
-const RECT_SIZE = 256;
+const RECT_SIZE = 128;
+const RECT_SIZE_MAX = 2048;
 
 // {animation_id: frames[rects[...]]}
 // { idle: [ [ [image_size, page_idx, page_offset, draw_offset], ... ] ] }
@@ -42,7 +43,7 @@ async function _onImages() {
   /**
    * @type {{ file: File, image: Image, pixels: Uint8ClampedArray, x: number, y: number, width: number, height: number, animations: { animation_id: string, frame_idx: number }[], page_idx: number }[]}
    */
-  const rects = [];
+  let rects = [];
 
   output_portrait = null;
 
@@ -140,6 +141,52 @@ async function _onImages() {
 
     progress.value += 1 / files.length;
   }
+
+  // Merge rects.
+  while (true) {
+    let has_merged = false;
+    for (let a of rects) {
+      if (a.old) {
+        continue;
+      }
+      for (let b of rects) {
+        if (b.old || a == b || a.file != b.file) {
+          continue;
+        }
+
+        if (a.width == b.width && a.x == b.x && a.y + a.height == b.y && a.height + b.height <= RECT_SIZE_MAX) {
+          a.height += b.height;
+          b.old = true;
+          has_merged = true;
+        }
+      }
+    }
+    if (!has_merged) {
+      break;
+    }
+  }
+  while (true) {
+    let has_merged = false;
+    for (let a of rects) {
+      if (a.old) {
+        continue;
+      }
+      for (let b of rects) {
+        if (b.old || a == b || a.file != b.file) {
+          continue;
+        }
+        if (a.height == b.height && a.y == b.y && a.x + a.width == b.x && a.width + b.width <= RECT_SIZE_MAX) {
+          a.width += b.width;
+          b.old = true;
+          has_merged = true;
+        }
+      }
+    }
+    if (!has_merged) {
+      break;
+    }
+  }
+  rects = rects.filter((rect) => !rect.old);
 
   // Pack rects into atlas.
   const options = {
@@ -274,33 +321,9 @@ async function _onDownload() {
   const zipBlob = await zip.generateAsync({ type: "blob" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(zipBlob);
-  link.download = "animation.zip";
+  link.download = "animations.zip";
   link.click();
   URL.revokeObjectURL(link.href);
-
-  // for (let i = 0; i < output_pages.length; i++) {
-  //   // save as webp
-  //   zip.file(`page${i}.webp`, output_pages[i].toDataURL("image/webp", 1).split("base64,")[1], { base64: true });
-  // }
-  // if (output_portrait) {
-  //   const img = new Image();
-  //   img.src = URL.createObjectURL(output_portrait);
-  //   await img.decode();
-  //   const canvas = document.createElement("canvas");
-  //   canvas.width = img.width;
-  //   canvas.height = img.height;
-  //   canvas.getContext("2d").drawImage(img, 0, 0);
-  //   // save as webp
-  //   zip.file(`portrait.webp`, canvas.toDataURL("image/webp", 1).split("base64,")[1], { base64: true });
-  // }
-  // zip.file('animations.json', JSON.stringify(output_json));
-  // zip.generateAsync({ type: "blob" }).then(function (content) {
-  //   const link = document.createElement("a");
-  //   link.href = URL.createObjectURL(content);
-  //   link.download = "animation.zip";  // Set the name of the download file
-  //   link.click();  // Trigger the download
-  //   URL.revokeObjectURL(link.href);
-  // });
 }
 
 /**
